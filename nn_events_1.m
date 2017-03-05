@@ -43,9 +43,27 @@ time_line_zoom = 10; % увеличиваем масштаб временной шкалы в 10 раз
 %   с максимумом в дате события
 factor_time_line = zeros(length(factors_map), time_line_size * time_line_zoom);
 
+% ширина всплеска события
+time_line_sigma = 100;
+
+% нормируем пик всплеска к единице
+time_line_sigma_scale = 1/normpdf(0,0,100);
+
 % проходим по всем событиям на шкале и добавляем его факторы на шкалы
 % факторов
-for i = 1:event_dates
+for i = 1:length(event_dates)
+    factors_map_keys = keys(factors_map);
+    % event_dates(i)
+    for current_factor_key = factors_map_keys
+        current_factor_index = find(strcmp(factors_map_keys, current_factor_key));
+        if isfinite(event_dates(i))
+            for j=1:time_line_zoom
+                current_time_line_position = event_dates(i)*time_line_zoom+j-1;
+                factor_time_line(current_factor_index, current_time_line_position) = j/10;
+                % factor_time_line(current_factor_index, current_time_line_position) = factor_time_line(current_factor_index, current_time_line_position) + normpdf(j-timeline_zoom/2,0,100);
+            end
+        end
+    end
 end
 
 function [factors, factors_map] = parse_factors(raw, factor_column_number)
