@@ -2,8 +2,11 @@
 % ни Excel, ни офис чтобы читать excel-файлы матлабу не нужен
 % num - матрица только числа
 % txt - матрица только текстовые значени€
-% raw - всЄ подр€д
+% raw - всЄ подр€д (ориентируемс€ на него, в остальных могут съезжать €чейки)
 [num,txt,raw] = xlsread('D:\Download\event_analysis\sample_1_1.xlsx', '', '', 'basic');
+
+% убираем первую строку с заголовками
+raw(1,:) = [];
 
 % перва€ строка в excel-файле - заголовки, игнорируем
 
@@ -13,18 +16,50 @@
 % парсим классы из столбца 4
 [classes, classes_map] = parse_factors(raw, 4);
 
-function [factors, factors_map] = parse_factors(raw, factor_row_number)
+% даты событий в первом столбце (считаем пока что это только год)
+
+% минимальное/максимальное врем€ на шкале
+% большие пустые промежутки дл€ простоты не выкидываем
+% столбец с датами первый
+date_column_number = 1;
+event_dates = cell2mat(raw(:,date_column_number));
+min_time = min(event_dates);
+max_time = max(event_dates);
+time_line_size = max_time - min_time;
+
+fprintf('начало временной шкалы: %.2f, конец: %.2f, размер:  %.2f\n', min_time, max_time, time_line_size);
+
+% масштабирование временной шкалы. мы делаем событие гладкой волной с пиком
+% в дате событи€, и чтобы дать пространство дл€ этой волны делаем шкалу
+% более детальной
+
+% если будут более точные даты, можно разнести отдельно годовые и
+% внутригодовые/внутримес€чные шкалы событий, чем пересчитывать шкалу в дни
+
+time_line_zoom = 10; % увеличиваем масштаб временной шкалы в 10 раз
+
+% factor_time_line[фактор]
+% - это плавна€ шкала событий по отдельному фактору
+%   с максимумом в дате событи€
+factor_time_line = zeros(length(factors_map), time_line_size * time_line_zoom);
+
+% проходим по всем событи€м на шкале и добавл€ем его факторы на шкалы
+% факторов
+for i = 1:event_dates
+end
+
+function [factors, factors_map] = parse_factors(raw, factor_column_number)
 
 % парсим факторы/классы
 % raw - таблица из excel
-% факторы в столбце factor_row_number, фразы через зап€тую
+% факторы в столбце factor_column_number, фразы через зап€тую
 % на выходе в factors будут распарсенные массивы фраз
 % в factors_map будет весь список факторов по всем событи€м
 
-factors = raw(:,factor_row_number);
+factors = raw(:,factor_column_number);
 factors_map = containers.Map;
 
-for i = 2:length(factors)
+for i = 1:length(factors)
     % парсим строку на фразы раздел€€ по зап€тым,
     % без пробелов в начале и конце
     
