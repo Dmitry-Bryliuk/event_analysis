@@ -80,7 +80,9 @@ event_wave_window = event_wave_window_original * time_line_zoom;
 % всплески накладываются друг на друга
 event_wave_x = -event_wave_window/2 : 1 : event_wave_window/2;
 event_wave_y = event_wave_scale * normpdf(event_wave_x, 0, time_line_sigma);
+
 % покажем график всплеска
+% figure('Name', 'форма всплеска');
 % plot(event_wave_x, event_wave_y);
 
 % return
@@ -132,6 +134,15 @@ for i = 1:length(event_dates)
 end
 fprintf('заполняю временные шкалы по факторам - сделано\n');
 
+% покажем графики событий по факторам
+figure('Name', 'события');
+subplot(length(factors_map_keys)+1,1,1);
+plot(rot90(factor_time_line));
+for i = 1:length(factors_map_keys)
+    subplot(length(factors_map_keys)+1,1,i+1);
+    plot(factor_time_line(i,:));
+end
+
 function [factors, factors_map] = parse_factors(raw, factor_column_number)
 
 % парсим факторы/классы
@@ -157,7 +168,7 @@ for i = 1:length(factors)
     single_event_factors = {};
     
     if ischar(factors{i}) % это текст?
-        single_event_factors = strsplit(strtrim(factors{i}),'\s*,\s*','DelimiterType','RegularExpression');
+        single_event_factors = strsplit(lower(strtrim(factors{i})),'\s*,\s*','DelimiterType','RegularExpression');
     elseif isfinite(factors{i}) % это число?
         single_event_factors = {num2str(factors{i})};
     end
