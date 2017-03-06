@@ -9,8 +9,10 @@
 %   отрицательные примеры для обучения нс
 % - [todo] проход скользящим окном по временной шкале факторов и поиск
 %   похожих событий
+% всякие промежуточные технические todo-шки:
 % - [todo] сохранение промежуточных результатов парсинга, чтобы
 %   быстрее перезапускалось с одинаковыми входными данными
+% - [todo] графики событий по факторам
 % что пока "за бортом", но планируется:
 % - спектральное преобразование временной шкалы (Фурье, вейвлеты, ...)
 % - сжатие пространства признаков (PCA-реконструкция)
@@ -26,10 +28,16 @@
 % убираем первую строку с заголовками
 raw(1,:) = [];
 
-% даты событий в первом столбце (считаем пока что это только год)
-
-% столбец с датами первый
+% формат ячеек в excel-файле
+% столбец с датами событий первый (считаем пока что это только год)
 date_column_number = 1;
+% столбец с описаниями второй
+description_column_number = 2;
+% столбец с факторами третий
+factors_column_number = 3;
+% столбец с классами четвёртый
+classes_column_number = 4;
+
 % вытащим столбец с датами отдельно
 event_dates = cell2mat(raw(:,date_column_number));
 % минимальное/максимальное время на шкале
@@ -79,41 +87,47 @@ event_wave_y = event_wave_scale * normpdf(event_wave_x, 0, time_line_sigma);
 
 % парсим excel-файл
 
-% парсим факторы из столбца 3
-[factors, factors_map] = parse_factors(raw, 3);
+% парсим факторы из столбца factors_column_number
+[factors, factors_map] = parse_factors(raw, factors_column_number);
 
-% парсим классы из столбца 4
-[classes, classes_map] = parse_factors(raw, 4);
+% парсим классы из столбца classes_column_number
+[classes, classes_map] = parse_factors(raw, classes_column_number);
 
 % factor_time_line[фактор]
-% это плавная шкала событий по отдельному фактору
+% это плавная временная шкала событий по каждому фактору
 % с максимумом в дате события
 % в начале и в конце к ней прицеплено по половине окна всплеска
 % чтобы крайние события не вылетали за пределы матрицы
 factor_time_line = zeros(length(factors_map), time_line_size * time_line_zoom + event_wave_window + 1);
 
-% проходим по всем событиям на шкале и добавляем его факторы на шкалы
-% факторов
+% вытащим отдельно список факторов
+factors_map_keys = keys(factors_map);
+
 fprintf('заполняю временные шкалы по факторам...\n');
+
+% проходим по всем событиям, по всем его факторам
+% и добавляем каждый фактор на соответствующую временную шкалу
 for i = 1:length(event_dates)
-    % список факторов
-    factors_map_keys = keys(factors_map);
-    % проходим по всем факторам и накладываем всплеск на временную шкалу
-    for current_factor_key = factors_map_keys
+    if ~isfinite(event_dates(i))
+        % пропускаем не-числа
+        continue;
+    end
+    fprintf('- событие [%d]: %s\n', raw{i,date_column_number}, raw{i,description_column_number});
+    % проходим по всем факторам события и накладываем всплеск на временную шкалу
+    for factor_key = factors{i}
         % найдём порядковый номер фактора в списке всех факторов
-        current_factor_index = find(strcmp(factors_map_keys, current_factor_key));
-        if isfinite(event_dates(i)) % это число?
-            % центр события на шкале (сдвинут на пол окна всплеска)
-            event_center_position = event_dates(i) * time_line_zoom + event_wave_window / 2;
-            % окно внутри временной шкалы с центром в событии
-            event_window = event_center_position - event_wave_window / 2 : event_center_position + event_wave_window / 2;
-            % добавим окно всплеска на временную шкалу
-            factor_time_line(current_factor_index, event_window) = factor_time_line(current_factor_index, event_window) + event_wave_y;
-            %for j=1:time_line_zoom
-            %    factor_time_line(current_factor_index, current_time_line_position) = j/10;
-            %    % factor_time_line(current_factor_index, current_time_line_position) = factor_time_line(current_factor_index, current_time_line_position) + normpdf(j-timeline_zoom/2,0,100);
-            %end
-        end
+        factor_index = find(strcmp(factors_map_keys, factor_key));
+        fprintf('  - фактор [%d]: %s\n', factor_index, factor_key{1});
+        % центр события на шкале (сдвинут на пол окна всплеска)
+        event_center_position = event_dates(i) * time_line_zoom + event_wave_window / 2 + 1;
+        % окно внутри временной шкалы с центром в событии
+        event_window = event_center_position - event_wave_window / 2 : event_center_position + event_wave_window / 2;
+        % добавим окно всплеска на временную шкалу
+        factor_time_line(factor_index, event_window) = factor_time_line(factor_index, event_window) + event_wave_y;
+        %for j=1:time_line_zoom
+        %    factor_time_line(current_factor_index, current_time_line_position) = j/10;
+        %    % factor_time_line(current_factor_index, current_time_line_position) = factor_time_line(current_factor_index, current_time_line_position) + normpdf(j-timeline_zoom/2,0,100);
+        %end
     end
 end
 fprintf('заполняю временные шкалы по факторам - сделано\n');
@@ -127,6 +141,7 @@ function [factors, factors_map] = parse_factors(raw, factor_column_number)
 % на выходе:
 % - в factors будут распарсенные массивы фраз
 % - в factors_map будет весь список факторов по всем событиям
+%   в виде ассоциативного множества
 
 % берём в factors только колонку с текстом/номерами факторов
 factors = raw(:,factor_column_number);
