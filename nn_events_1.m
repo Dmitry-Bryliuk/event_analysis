@@ -7,6 +7,8 @@
 %     нейронной сетью
 % - [todo] извлекает примеры известных классов и генерирует искусственные
 %   отрицательные примеры для обучения нс
+%   (на дополнительное генерирование слегка искажённых исходных
+%    и сгенерированных классов пока забьём)
 % - [todo] проход скользящим окном по временной шкале факторов и поиск
 %   похожих событий
 % всякие промежуточные технические todo-шки:
@@ -16,7 +18,7 @@
 % что пока "за бортом", но планируется:
 % - спектральное преобразование временной шкалы (Фурье, вейвлеты, ...)
 % - сжатие пространства признаков (PCA-реконструкция)
-% - кластеризация событий
+% - кластеризация событий (думается на основе сжатых признаков)
 
 % читаем excel-файл
 % ни Excel, ни офис чтобы читать excel-файлы матлабу не нужен
@@ -95,6 +97,55 @@ event_wave_y = event_wave_scale * normpdf(event_wave_x, 0, time_line_sigma);
 % парсим классы из столбца classes_column_number
 [classes, classes_map] = parse_factors(raw, classes_column_number);
 
+% вытащим группы событий, для которых проставлены классы, в обучающую
+% выборку
+
+% вытащим отдельно список классов
+classes_map_keys = keys(classes_map);
+
+% сюда складываем найденные и сгенерированные группы событий по классам
+% classes_events_map(класс) = список событий класса: строки, даты, факторы
+% запоминаем все значения, потому что в сгенерированных классах не будет
+% исходной строки из excel-я
+classes_events_map = containers.Map('KeyType','char','ValueType','any');
+
+fprintf('заполняю обучающие примеры по заданным классам...\n');
+
+% пройдём по всем классам
+for class_key = classes_map_keys
+    fprintf('- класс %s\n', class_key{1});
+    % массив событий класса, инициализируем посчитанной длинной
+    class_event_count = classes_map(class_key{1});
+    class_events = struct('rows', zeros(class_event_count, 1), 'dates', zeros(class_event_count, 1), 'factors', {{}});
+    class_event_counter = 1;
+    for i = 1:length(classes)
+        if ismember(classes{i}, class_key)
+            fprintf('  - событие #%d/%d [%d]: %s, %s\n', class_event_counter, i, raw{i,date_column_number}, raw{i,description_column_number}, strjoin(factors{i}));
+            % номер строки из excel-я
+            class_events.rows(class_event_counter) = i;
+            % дата события
+            class_events.dates(class_event_counter) = event_dates(i);
+            % факторы события
+            class_events.factors{class_event_counter} = factors{i};
+            class_event_counter = class_event_counter + 1;
+        end
+    end
+    classes_events_map(class_key{1}) = class_events;
+end
+
+fprintf('заполняю обучающие примеры по заданным классам - сделано\n');
+
+% сгенерируем случайно несколько групп событий других классов
+% (отрицательные примеры)
+% todo ...
+
+% заполним временные шкалы обучающих примеров
+% todo ...
+
+return;
+
+% заполним временную шкалу всеми факторами
+
 % factor_time_line[фактор]
 % это плавная временная шкала событий по каждому фактору
 % с максимумом в дате события
@@ -150,9 +201,10 @@ function [factors, factors_map] = parse_factors(raw, factor_column_number)
 % - raw - таблица из excel
 % - факторы в столбце factor_column_number, фразы через запятую
 % на выходе:
-% - в factors будут распарсенные массивы фраз
+% - в factors{i} будут распарсенные массивы фраз для события в строке i
 % - в factors_map будет весь список факторов по всем событиям
-%   в виде ассоциативного множества
+%   в виде ассоциативного множества:
+%   factors_map(фактор) = сколько раз встретился этот фактор в событиях
 
 % берём в factors только колонку с текстом/номерами факторов
 factors = raw(:,factor_column_number);
@@ -174,8 +226,13 @@ for i = 1:length(factors)
     end
     
     % добавляем все факторы текущего события к множеству всех факторов
+    % заодно считаем количество каждого фактора в отдельности, пригодится
     for curren_event_factor = single_event_factors
-        factors_map(curren_event_factor{1}) = 1;
+        factor_count = 0;
+        if factors_map.isKey(curren_event_factor{1})
+            factor_count = factors_map(curren_event_factor{1});
+        end
+        factors_map(curren_event_factor{1}) = factor_count + 1;
     end
     
     % запоминаем распарсенный массив факторов для события
