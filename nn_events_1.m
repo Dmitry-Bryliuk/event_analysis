@@ -78,8 +78,12 @@ time_line_sigma_original = 3;
 % ширина всплеска события отмасштабированная
 time_line_sigma = time_line_zoom * time_line_sigma_original;
 
+% функция всплеска (можно поэкспериментировать какая лучше)
+% distrib = @(vec) normpdf(vec, 0, time_line_sigma);
+distrib = @(vec) pdf('Stable', vec, 0.5, 0, time_line_sigma, 0);
+
 % нормируем пик всплеска к единице
-event_wave_scale = 1/normpdf(0, 0, time_line_sigma);
+event_wave_scale = 1/distrib(0);
 
 % ширина окна волны для наложения на временную шкалу
 % в исходных единицах (годы)
@@ -91,7 +95,7 @@ event_wave_window = event_wave_window_original * time_line_zoom;
 % он добавляется на временную шкалу фактора
 % всплески накладываются друг на друга
 event_wave_x = -event_wave_window/2 : 1 : event_wave_window/2;
-event_wave_y = event_wave_scale * normpdf(event_wave_x, 0, time_line_sigma);
+event_wave_y = event_wave_scale * distrib(event_wave_x);
 
 % покажем график всплеска
 % figure('Name', 'форма всплеска');
@@ -140,6 +144,9 @@ for class_key = classes_map_keys
             class_event_counter = class_event_counter + 1;
         end
     end
+    % сдвинем даты в начало окна
+    class_events.dates = class_events.dates - min(class_events.dates);
+    % запомним данные по названию класса
     classes_events_map(class_key{1}) = class_events;
 end
 
