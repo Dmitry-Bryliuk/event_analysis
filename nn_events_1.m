@@ -90,11 +90,14 @@ event_wave_scale = 1/distrib(0);
 event_wave_window_original = 100;
 % ширина окна волны отмасштабированная
 event_wave_window = event_wave_window_original * time_line_zoom;
+% размеры окна и его половины округлены до целых чисел
+event_wave_window_half = fix(event_wave_window / 2);
+event_wave_window = event_wave_window_half * 2;
 
 % (event_wave_x, event_wave_y) - всплеск с центром события
 % он добавляется на временную шкалу фактора
 % всплески накладываются друг на друга
-event_wave_x = -event_wave_window/2 : 1 : event_wave_window/2;
+event_wave_x = -event_wave_window_half : 1 : event_wave_window_half;
 event_wave_y = event_wave_scale * distrib(event_wave_x);
 
 % покажем график всплеска
@@ -121,7 +124,11 @@ classes_map_keys = keys(classes_map);
 % classes_events_map(класс) = список событий класса: строки, даты, факторы
 % запоминаем все значения, потому что в сгенерированных классах не будет
 % исходной строки из excel-я
+% пока что один класс содержит только одну группу событий
 classes_events_map = containers.Map('KeyType','char','ValueType','any');
+
+% функция для создания пустой структуры класса
+create_class_events = @(class_event_count) struct('rows', zeros(class_event_count, 1), 'dates', zeros(class_event_count, 1), 'factors', {{}});
 
 fprintf('заполняю обучающие примеры по заданным классам...\n');
 
@@ -130,7 +137,7 @@ for class_key = classes_map_keys
     fprintf('- класс %s\n', class_key{1});
     % массив событий класса, инициализируем посчитанной длинной
     class_event_count = classes_map(class_key{1});
-    class_events = struct('rows', zeros(class_event_count, 1), 'dates', zeros(class_event_count, 1), 'factors', {{}});
+    class_events = create_class_events(class_event_count);
     class_event_counter = 1;
     for i = 1:length(classes)
         if ismember(classes{i}, class_key)
@@ -156,6 +163,52 @@ fprintf('заполняю обучающие примеры по заданным классам - сделано\n');
 % (отрицательные примеры)
 % todo ...
 
+% количество отрицательных примеров
+generated_negative_classes_count = 10;
+
+% список исходных классов
+% из них будем брать некоторые параметры для генерации выборки
+classes_events_values = values(classes_events_map);
+
+fprintf('генерирую случайные обучающие классы...\n');
+
+% todo: сгенерировать факторы, графики по классам
+
+for generated_class_counter = 1:generated_negative_classes_count
+    % сгенерируем имя класса
+    generated_class_name = sprintf('random_class_%02d', generated_class_counter);
+    fprintf('- класс %s\n', generated_class_name);
+    % выберем случайно исходный класс
+    refer_class_index = randi(length(classes_events_values));
+    original_event_count = length(classes_events_values{refer_class_index}.dates);
+    random_date_range = classes_events_values{refer_class_index}.dates(original_event_count);
+    % сгенерируем случайно диапазон дат для событий, +/- 50% от исходного
+    random_date_range = fix(random_date_range/2) + randi(random_date_range);
+    % сгенерируем случайно количество событий, +/- 50% от исходного
+    random_event_count = fix(original_event_count/2) + randi(original_event_count);
+    % создадим пустой класс
+    class_events = create_class_events(class_event_count);
+    % заполним класс сгенерированными событиями
+    for class_event_counter = 1:random_event_count
+        % сгенерируем случайно дату события
+        generated_event_date = randi(random_date_range);
+        % сгенерируем случайно количество факторов, +/- 50% от исходного
+        original_factor_count = length(classes_events_values{refer_class_index}.factors);
+        random_factor_count = fix(original_factor_count/2) + randi(original_factor_count);
+        fprintf('  - событие #%d [%d]: %s, %s\n', class_event_counter, generated_event_date, generated_class_name, 'strjoin(factors{i})');
+        % дата события
+        class_events.dates(class_event_counter) = generated_event_date;
+        % факторы события
+        % class_events.factors{class_event_counter} = factors{i};
+    end
+    % сдвинем даты в начало окна
+    class_events.dates = class_events.dates - min(class_events.dates);
+    % запомним данные по названию класса
+    classes_events_map(generated_class_name) = class_events;
+end
+
+fprintf('генерирую случайные обучающие классы - сделано\n');
+
 % заполним временные шкалы обучающих примеров
 % todo ...
 
@@ -171,7 +224,7 @@ fprintf('заполняю обучающие примеры по заданным классам - сделано\n');
 factor_time_line = zeros(length(factors_map), time_line_size * time_line_zoom + event_wave_window + 1);
 
 % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
-event_dates_time_line = event_dates * time_line_zoom + event_wave_window / 2 + 1;
+event_dates_time_line = event_dates * time_line_zoom + event_wave_window_half + 1;
 
 % вытащим отдельно список факторов
 factors_map_keys = keys(factors_map);
@@ -202,7 +255,7 @@ for i = 1:length(event_dates)
         % запомним его позицию для графика (добавляем в конец)
         event_dates_time_line_by_factor{factor_index}(find(event_dates_time_line_by_factor{factor_index}==0,1)) = event_center_position;
         % окно внутри временной шкалы с центром в событии
-        event_window = event_center_position - event_wave_window / 2 : event_center_position + event_wave_window / 2;
+        event_window = event_center_position - event_wave_window_half : event_center_position + event_wave_window_half;
         % добавим окно всплеска на временную шкалу
         factor_time_line(factor_index, event_window) = factor_time_line(factor_index, event_window) + event_wave_y;
     end
