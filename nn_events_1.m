@@ -11,14 +11,24 @@
 %    и сгенерированных классов пока забьём)
 % - [todo] проход скользящим окном по временной шкале факторов и поиск
 %   похожих событий
+%
 % всякие промежуточные технические todo-шки:
 % - [todo] сохранение промежуточных результатов парсинга, чтобы
 %   быстрее перезапускалось с одинаковыми входными данными
 % - [todo] графики событий по факторам
+%
 % что пока "за бортом", но планируется:
 % - спектральное преобразование временной шкалы (Фурье, вейвлеты, ...)
 % - сжатие пространства признаков (PCA-реконструкция)
 % - кластеризация событий (думается на основе сжатых признаков)
+%
+% примечания:
+% - код можно было бы написать намного проще, без преалокаций матриц,
+%   но это лишние тормоза
+%   для простоты пожно писать без этого,
+%   типа A(length(A)+1) = следующее значение
+% - по максимуму используются матричные операции, это намного быстрее,
+%   хоть и выглядит немного магией
 
 % читаем excel-файл
 % ни Excel, ни офис чтобы читать excel-файлы матлабу не нужен
@@ -64,7 +74,7 @@ fprintf('начало временной шкалы: %.2f, конец: %.2f, размер:  %.2f\n', min_time, 
 time_line_zoom = 10;
 
 % ширина всплеска события в исходных единицах (годы)
-time_line_sigma_original = 10;
+time_line_sigma_original = 3;
 % ширина всплеска события отмасштабированная
 time_line_sigma = time_line_zoom * time_line_sigma_original;
 
@@ -142,7 +152,7 @@ fprintf('заполняю обучающие примеры по заданным классам - сделано\n');
 % заполним временные шкалы обучающих примеров
 % todo ...
 
-return;
+% return;
 
 % заполним временную шкалу всеми факторами
 
@@ -153,8 +163,17 @@ return;
 % чтобы крайние события не вылетали за пределы матрицы
 factor_time_line = zeros(length(factors_map), time_line_size * time_line_zoom + event_wave_window + 1);
 
+% даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
+event_dates_time_line = event_dates * time_line_zoom + event_wave_window / 2 + 1;
+
 % вытащим отдельно список факторов
 factors_map_keys = keys(factors_map);
+
+% сюда складываем позиции событий на шкале по каждому фактору
+% (нужны чтобы отмечать позиции на графике)
+% event_dates_time_line_by_factor = cell(length(factors_map_keys), 1);
+% выделим заранее место под список дат каждого фактора
+event_dates_time_line_by_factor = cellfun(@(fk) zeros(factors_map(fk), 1), factors_map_keys, 'UniformOutput', false);
 
 fprintf('заполняю временные шкалы по факторам...\n');
 
@@ -172,26 +191,26 @@ for i = 1:length(event_dates)
         factor_index = find(strcmp(factors_map_keys, factor_key));
         fprintf('  - фактор [%d]: %s\n', factor_index, factor_key{1});
         % центр события на шкале (сдвинут на пол окна всплеска)
-        event_center_position = event_dates(i) * time_line_zoom + event_wave_window / 2 + 1;
+        event_center_position = event_dates_time_line(i);
+        % запомним его позицию для графика (добавляем в конец)
+        event_dates_time_line_by_factor{factor_index}(find(event_dates_time_line_by_factor{factor_index}==0,1)) = event_center_position;
         % окно внутри временной шкалы с центром в событии
         event_window = event_center_position - event_wave_window / 2 : event_center_position + event_wave_window / 2;
         % добавим окно всплеска на временную шкалу
         factor_time_line(factor_index, event_window) = factor_time_line(factor_index, event_window) + event_wave_y;
-        %for j=1:time_line_zoom
-        %    factor_time_line(current_factor_index, current_time_line_position) = j/10;
-        %    % factor_time_line(current_factor_index, current_time_line_position) = factor_time_line(current_factor_index, current_time_line_position) + normpdf(j-timeline_zoom/2,0,100);
-        %end
     end
 end
 fprintf('заполняю временные шкалы по факторам - сделано\n');
 
 % покажем графики событий по факторам
-figure('Name', 'события');
-subplot(length(factors_map_keys)+1,1,1);
+figure('Name', 'события по факторам');
+% рисуем все факторы в первый подграфик
+subplot(length(factors_map_keys) + 1, 1, 1);
 plot(rot90(factor_time_line));
 for i = 1:length(factors_map_keys)
-    subplot(length(factors_map_keys)+1,1,i+1);
-    plot(factor_time_line(i,:));
+    % рисуем фактор i в i+1 подграфик
+    subplot(length(factors_map_keys) + 1, 1, i+1);
+    plot(factor_time_line(i,:), '-o', 'MarkerIndices', event_dates_time_line_by_factor{i});
 end
 
 function [factors, factors_map] = parse_factors(raw, factor_column_number)
@@ -205,6 +224,7 @@ function [factors, factors_map] = parse_factors(raw, factor_column_number)
 % - в factors_map будет весь список факторов по всем событиям
 %   в виде ассоциативного множества:
 %   factors_map(фактор) = сколько раз встретился этот фактор в событиях
+%   todo: наверно стоит сюда писать сразу список дат
 
 % берём в factors только колонку с текстом/номерами факторов
 factors = raw(:,factor_column_number);
