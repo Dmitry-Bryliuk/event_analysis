@@ -161,7 +161,6 @@ fprintf('заполняю обучающие примеры по заданным классам - сделано\n');
 
 % сгенерируем случайно несколько групп событий других классов
 % (отрицательные примеры)
-% todo ...
 
 % количество отрицательных примеров
 generated_negative_classes_count = 10;
@@ -170,9 +169,10 @@ generated_negative_classes_count = 10;
 % из них будем брать некоторые параметры для генерации выборки
 classes_events_values = values(classes_events_map);
 
-fprintf('генерирую случайные обучающие классы...\n');
+% вытащим отдельно список факторов
+factors_map_keys = keys(factors_map);
 
-% todo: сгенерировать факторы, графики по классам
+fprintf('генерирую случайные обучающие классы...\n');
 
 for generated_class_counter = 1:generated_negative_classes_count
     % сгенерируем имя класса
@@ -212,6 +212,27 @@ for generated_class_counter = 1:generated_negative_classes_count
 end
 
 fprintf('генерирую случайные обучающие классы - сделано\n');
+
+% сгенерируем временные шкалы по факторам для классов
+% todo...
+% берём список классов
+classes_events_values = values(classes_events_map);
+class_events_index = 1;
+for class_events = classes_events_values
+    class_events_index = class_events_index + 1;
+end
+
+% покажем графики событий по классам
+% todo...
+%{
+figure('Name', 'события по классам');
+class_events_index = 1;
+for class_events = classes_events_values
+    subplot(length(classes_events_map), 1, class_events_index);
+    plot(factor_time_line(i,:), '-o', 'MarkerIndices', event_dates_time_line_by_factor{i});
+    class_events_index = class_events_index + 1;
+end
+%}
 
 % заполним временные шкалы обучающих примеров
 % todo ...
@@ -277,9 +298,26 @@ for i = 1:length(factors_map_keys)
     plot(factor_time_line(i,:), '-o', 'MarkerIndices', event_dates_time_line_by_factor{i});
 end
 
+% функция fill_time_line_by_event_factors
+% - заполняем временные шкалы по факторам всплесками в центрах событий
+% todo...
+
+function [factor_time_line] = fill_time_line_by_event_factors(event_dates, event_factors, title)
+
+% на входе:
+% - event_dates - исходные даты событий
+% - event_factors - факторы к каждой дате
+% - message - сообщение для консоли и графика
+% на выходе:
+% - factor_time_line - заполненная временная шкала по факторам
+
+
+end
+
+% функция parse_factors - парсим факторы/классы из excel-я
+
 function [factors, factors_map] = parse_factors(raw, factor_column_number)
 
-% парсим факторы/классы
 % на входе:
 % - raw - таблица из excel
 % - факторы в столбце factor_column_number, фразы через запятую
