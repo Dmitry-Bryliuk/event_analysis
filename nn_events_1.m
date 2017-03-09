@@ -192,14 +192,14 @@ for generated_class_counter = 1:generated_negative_classes_count
     for class_event_counter = 1:random_event_count
         % сгенерируем случайно дату события
         generated_event_date = randi(random_date_range);
+        % дата события
+        class_events.dates(class_event_counter) = generated_event_date;
         % сгенерируем случайно количество факторов, +/- 50% от исходного
         original_factor_count = length(classes_events_values{refer_class_index}.factors);
         random_factor_count = fix(original_factor_count/2) + randi(original_factor_count);
-        fprintf('  - событие #%d [%d]: %s, %s\n', class_event_counter, generated_event_date, generated_class_name, 'strjoin(factors{i})');
-        % дата события
-        class_events.dates(class_event_counter) = generated_event_date;
         % факторы события
-        % class_events.factors{class_event_counter} = factors{i};
+        class_events.factors{class_event_counter} = cellfun(@(z) factors_map_keys{randi(length(factors_map_keys))}, cell(random_factor_count,1), 'UniformOutput', false);
+        fprintf('  - событие #%d [%d]: %s, %s\n', class_event_counter, generated_event_date, generated_class_name, strjoin(class_events.factors{class_event_counter}));
     end
     % сдвинем даты в начало окна
     class_events.dates = class_events.dates - min(class_events.dates);
