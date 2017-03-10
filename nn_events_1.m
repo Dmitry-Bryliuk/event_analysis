@@ -110,11 +110,14 @@ event_wave_window = event_wave_window_half * 2;
 event_wave_x = -event_wave_window_half : 1 : event_wave_window_half;
 event_wave_y = event_wave_scale * distrib(event_wave_x);
 
-% размер временной шкалы
-% (отмасштабированный и добавлены по пол-окна всплеска в начале и конце)
-time_line_size_scaled = time_line_size * time_line_zoom + event_wave_window + 1;
+% функция вычисления размера отмасштабированной временной шкалы
+% (добавлены по пол-окна всплеска в начале и конце)
+calculate_time_line_size_scaled = @(time_line_size_original) time_line_size_original * time_line_zoom + event_wave_window + 1;
+
+% размер отмасштабированной временной шкалы
+time_line_size_scaled = calculate_time_line_size_scaled(time_line_size);
 % диапазон по оси X для рисования всяких графиков
-time_line_range_scaled = time_line_size * time_line_zoom + event_wave_window + 1;
+time_line_range_scaled = 1:time_line_size_scaled;
 
 % покажем график всплеска
 % figure('Name', 'форма всплеска');
@@ -169,6 +172,10 @@ for class_key = classes_map_keys
     end
     % сдвинем даты в начало окна
     class_events.dates = class_events.dates - min(class_events.dates);
+    % запомним количество событий
+    class_events.event_count = length(class_events.dates);
+    % запомним диапазон дат событий
+    class_events.time_line_size = max(class_events.dates);
     % запомним данные по названию класса
     classes_events_map(class_key{1}) = class_events;
 end
@@ -195,13 +202,11 @@ for generated_class_counter = 1:generated_negative_classes_count
     generated_class_name = sprintf('random_class_%02d', generated_class_counter);
     fprintf('- класс %s\n', generated_class_name);
     % выберем случайно исходный класс
-    refer_class_index = randi(length(classes_events_values));
-    original_event_count = length(classes_events_values{refer_class_index}.dates);
-    random_date_range = classes_events_values{refer_class_index}.dates(original_event_count);
+    class_events_refered = classes_events_values{randi(length(classes_events_values))};
     % сгенерируем случайно диапазон дат для событий, +/- 50% от исходного
-    random_date_range = fix(random_date_range/2) + randi(random_date_range);
+    random_date_range = fix(class_events_refered.time_line_size/2) + randi(class_events_refered.time_line_size);
     % сгенерируем случайно количество событий, +/- 50% от исходного
-    random_event_count = fix(original_event_count/2) + randi(original_event_count);
+    random_event_count = fix(class_events_refered.event_count/2) + randi(class_events_refered.event_count);
     % создадим пустой класс
     class_events = create_class_events(class_event_count);
     % заполним класс сгенерированными событиями
@@ -211,7 +216,7 @@ for generated_class_counter = 1:generated_negative_classes_count
         % дата события
         class_events.dates(class_event_counter) = generated_event_date;
         % сгенерируем случайно количество факторов, +/- 50% от исходного
-        original_factor_count = length(classes_events_values{refer_class_index}.factors);
+        original_factor_count = length(class_events_refered.factors);
         % чтобы факторов не было больше чем есть берём минимум от
         % случайного и общего количества
         random_factor_count = min([fix(original_factor_count/2) + randi(original_factor_count) length(factors_map_keys)]);
@@ -223,19 +228,49 @@ for generated_class_counter = 1:generated_negative_classes_count
     end
     % сдвинем даты в начало окна
     class_events.dates = class_events.dates - min(class_events.dates);
+    % запомним количество событий
+    class_events.event_count = length(class_events.dates);
+    % запомним диапазон дат событий
+    class_events.time_line_size = max(class_events.dates);
     % запомним данные по названию класса
     classes_events_map(generated_class_name) = class_events;
 end
 
 fprintf('генерирую случайные обучающие классы - сделано\n');
 
+% todo: использовать везде _original и _scaled суфиксы для переменных,
+% иначе путаница
+% todo: лог прогресса и графики по нормальному
+% todo: исправить ошибки
+
 % сгенерируем временные шкалы по факторам для классов
 % todo...
 % берём список классов
-classes_events_values = values(classes_events_map);
-class_events_index = 1;
+classes_events_values = cell2mat(values(classes_events_map));
+% проходим во всем классам
 for class_events = classes_events_values
-    class_events_index = class_events_index + 1;
+    % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
+    class_events.event_dates_time_line = calculate_event_dates_time_line(class_events.dates);
+    % временная шкала для этого класса, по факторам, с наложенными всплесками событий
+    class_events.factor_time_line = zeros(length(factors_map), calculate_time_line_size_scaled(class_events.time_line_size));
+    % проходим по всем событиям класса
+    for class_event_counter = 1:class_events.event_count
+        % проходим по всем факторам события и накладываем всплеск на временную шкалу
+        for factor_key = class_events.factors{class_event_counter}
+            % найдём порядковый номер фактора в списке всех факторов
+            factor_index = find(strcmp(factors_map_keys, factor_key));
+            fprintf('  - фактор [%d]: %s\n', factor_index, factor_key{1});
+            % центр события на шкале (сдвинут на пол окна всплеска)
+            event_center_position = class_events.event_dates_time_line(class_event_counter);
+            % запомним его позицию для графика (добавляем в конец)
+            %event_dates_time_line_by_factor{factor_index}(find(event_dates_time_line_by_factor{factor_index}==0,1)) = event_center_position;
+            % окно внутри временной шкалы с центром в событии
+            event_window = calculate_event_window(event_center_position);
+            % добавим окно всплеска на временную шкалу
+            class_events.factor_time_line(factor_index, event_window) = class_events.factor_time_line(factor_index, event_window) + event_wave_y;
+        end
+    end
+    figure; plot(rot90(class_events.factor_time_line));
 end
 
 % покажем графики событий по классам
