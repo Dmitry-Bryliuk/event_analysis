@@ -56,7 +56,7 @@ event_dates = cell2mat(raw(:,date_column_number));
 % большие пустые промежутки для простоты не выкидываем
 min_time = min(event_dates);
 max_time = max(event_dates);
-% размер временной шкалы
+% размер временной шкалы (немасштабированный)
 time_line_size = max_time - min_time;
 % сдвинем даты в начало временной шкалы чтобы удобнее считать
 event_dates = event_dates - min_time;
@@ -78,6 +78,14 @@ time_line_sigma_original = 3;
 % ширина всплеска события отмасштабированная
 time_line_sigma = time_line_zoom * time_line_sigma_original;
 
+% функция пересчёта исходной даты в позицию на шкале
+% (масштабируем и сдвигаем на пол-окна)
+calculate_event_dates_time_line = @(event_dates_original) event_dates_original * time_line_zoom + event_wave_window_half + 1;
+
+% функция вычисления положения окна события по центру события
+% (диапазон значений по оси)
+calculate_event_window = @(event_center_position) event_center_position - event_wave_window_half : event_center_position + event_wave_window_half;
+
 % функция всплеска (можно поэкспериментировать какая лучше)
 % distrib = @(vec) normpdf(vec, 0, time_line_sigma);
 distrib = @(vec) pdf('Stable', vec, 0.5, 0, time_line_sigma, 0);
@@ -93,12 +101,20 @@ event_wave_window = event_wave_window_original * time_line_zoom;
 % размеры окна и его половины округлены до целых чисел
 event_wave_window_half = fix(event_wave_window / 2);
 event_wave_window = event_wave_window_half * 2;
+% фактически окно будет на единицу больше, т.к. добавляется центральная
+% позиция, а слева и справа от неё по пол-окна
 
 % (event_wave_x, event_wave_y) - всплеск с центром события
 % он добавляется на временную шкалу фактора
 % всплески накладываются друг на друга
 event_wave_x = -event_wave_window_half : 1 : event_wave_window_half;
 event_wave_y = event_wave_scale * distrib(event_wave_x);
+
+% размер временной шкалы
+% (отмасштабированный и добавлены по пол-окна всплеска в начале и конце)
+time_line_size_scaled = time_line_size * time_line_zoom + event_wave_window + 1;
+% диапазон по оси X для рисования всяких графиков
+time_line_range_scaled = time_line_size * time_line_zoom + event_wave_window + 1;
 
 % покажем график всплеска
 % figure('Name', 'форма всплеска');
@@ -246,10 +262,10 @@ end
 % с максимумом в дате события
 % в начале и в конце к ней прицеплено по половине окна всплеска
 % чтобы крайние события не вылетали за пределы матрицы
-factor_time_line = zeros(length(factors_map), time_line_size * time_line_zoom + event_wave_window + 1);
+factor_time_line = zeros(length(factors_map), time_line_size_scaled);
 
 % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
-event_dates_time_line = event_dates * time_line_zoom + event_wave_window_half + 1;
+event_dates_time_line = calculate_event_dates_time_line(event_dates);
 
 % вытащим отдельно список факторов
 factors_map_keys = keys(factors_map);
@@ -280,7 +296,7 @@ for i = 1:length(event_dates)
         % запомним его позицию для графика (добавляем в конец)
         event_dates_time_line_by_factor{factor_index}(find(event_dates_time_line_by_factor{factor_index}==0,1)) = event_center_position;
         % окно внутри временной шкалы с центром в событии
-        event_window = event_center_position - event_wave_window_half : event_center_position + event_wave_window_half;
+        event_window = calculate_event_window(event_center_position);
         % добавим окно всплеска на временную шкалу
         factor_time_line(factor_index, event_window) = factor_time_line(factor_index, event_window) + event_wave_y;
     end
@@ -312,7 +328,7 @@ function [factor_time_line] = fill_time_line_by_event_factors(event_dates, event
 % - factor_time_line - заполненная временная шкала по факторам
 
 
-end
+end % function fill_time_line_by_event_factors
 
 % функция parse_factors - парсим факторы/классы из excel-я
 
@@ -361,4 +377,4 @@ for i = 1:length(factors)
     factors{i} = single_event_factors;
 end
 
-end
+end % function parse_factors
