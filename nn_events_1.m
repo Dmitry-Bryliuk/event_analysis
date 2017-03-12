@@ -5,17 +5,20 @@
 % - генерирует временные шкалы по факторам
 %   - гладкие всплески с пиком в центре события для лучшего восприятия
 %     нейронной сетью
-% - [todo] извлекает примеры известных классов и генерирует искусственные
+% - извлекает примеры известных классов и генерирует искусственные
 %   отрицательные примеры для обучения нс
 %   (на дополнительное генерирование слегка искажённых исходных
 %    и сгенерированных классов пока забьём)
-% - [todo] проход скользящим окном по временной шкале факторов и поиск
+% - проход скользящим окном по временной шкале факторов и поиск
 %   похожих событий
+% - [todo] внятные подписи и позиционирование графиков, пока что не понять
+%   что оно показывает
+% - [todo] искажение/зашумление всей шкалы и отдельных примеров, чтобы
+%   проверить насколько всё чётко работает?
 %
 % всякие промежуточные технические todo-шки:
 % - [todo] сохранение промежуточных результатов парсинга, чтобы
 %   быстрее перезапускалось с одинаковыми входными данными
-% - [todo] графики событий по факторам
 %
 % что пока "за бортом", но планируется:
 % - спектральное преобразование временной шкалы (Фурье, вейвлеты, ...)
@@ -36,6 +39,9 @@
 %   в массиве
 % - где матрицы, а где ячейки в матлабе - это полная магия, выясняется
 %   методом тыка в консоли, отладке и окне переменных
+% - полный бардак с областью видимости переменных, глобальная видимость
+%   кроме как внутри функций, отчего всякие промежуточные значения
+%   просачиваются в другие куски кода, поэтому будьте внимательны
 
 % очистим консоль от предыдущего запуска
 clc;
@@ -150,7 +156,7 @@ print_end_progress = @(title) fprintf('%s - сделано\n\n', title);
 % парсим excel-файл
 
 % парсим факторы из столбца factors_column_number
-% в factors_by_row{i} список факторов для события в строке i
+% в factors_by_row{row_index} список факторов для события в строке i
 % в factors_map{F} сколько раз встретился фактор F во всех событиях
 [factors_by_row, factors_map] = parse_factors(raw, factors_column_number);
 
@@ -190,15 +196,15 @@ for class_key = classes_map_keys
     % пройдём по всем ячейкам событий и вытащим в класс только те,
     % которые принадлежат этому классу
     class_event_counter = 1;
-    for i = 1:length(classes_by_row)
-        if ismember(classes_by_row{i}, class_key)
-            fprintf('  - событие #%d/строка:%d/дата:%d/: %s, %s\n', class_event_counter, i, raw{i,date_column_number}, raw{i,description_column_number}, strjoin(factors_by_row{i}));
+    for row_index = 1:length(classes_by_row)
+        if ismember(classes_by_row{row_index}, class_key)
+            fprintf('  - событие #%d/строка:%d/дата:%d/: %s, %s\n', class_event_counter, row_index, raw{row_index,date_column_number}, raw{row_index,description_column_number}, strjoin(factors_by_row{row_index}));
             % номер строки из excel-я
-            class_info.rows(class_event_counter) = i;
+            class_info.rows(class_event_counter) = row_index;
             % дата события
-            class_info.dates(class_event_counter) = event_dates_original(i);
+            class_info.dates(class_event_counter) = event_dates_original(row_index);
             % факторы события
-            class_info.factors{class_event_counter} = factors_by_row{i};
+            class_info.factors{class_event_counter} = factors_by_row{row_index};
             class_event_counter = class_event_counter + 1;
         end
     end
@@ -411,20 +417,35 @@ for class_index = 1:length(classes_info_values)
     nn_output(class_index, sample_index) = 1;
 end
 
-title = 'обучаю нейронную сеть';
-print_start_progress(title);
+% чтобы не переобучать сеть с каждым запуском при одинаковых данных
+% ставьте nn_trained = true
+nn_trained = false;
 
-% нейронная сеть с двумя слоями, в списке количество нейронов в каждом слое
-% предположительно количество нейронов имеет смысл делать порядка
-% количества событий в классе
-% больше двух скрытых слоёв смысла делать наверно тоже не имеет
-nn = patternnet([10 10]);
-% не показывать окно с нс после обучения
-nn.trainParam.showWindow = 0;
-% обучаем нейронную сеть на примерах
-nn = train(nn, nn_input, nn_output);
-
-print_end_progress(title);
+if nn_trained
+    title = 'загружаю обученную нейронную сеть';
+    print_start_progress(title);
+    
+    load nn;
+    
+    print_end_progress(title);
+else
+    title = 'обучаю нейронную сеть';
+    print_start_progress(title);
+    
+    % нейронная сеть с двумя слоями, в списке количество нейронов в каждом слое
+    % предположительно количество нейронов имеет смысл делать порядка
+    % количества событий в классе
+    % больше двух скрытых слоёв смысла делать наверно тоже не имеет
+    nn = patternnet([10 10]);
+    % не показывать окно с нс после обучения
+    nn.trainParam.showWindow = 0;
+    % обучаем нейронную сеть на примерах
+    nn = train(nn, nn_input, nn_output);
+    
+    save nn;
+    
+    print_end_progress(title);
+end
 
 % заполним временную шкалу всеми факторами
 
@@ -449,19 +470,19 @@ print_start_progress(title);
 
 % проходим по всем событиям, по всем его факторам
 % и добавляем каждый фактор на соответствующую временную шкалу
-for i = 1:length(event_dates_original)
-    if ~isfinite(event_dates_original(i))
+for row_index = 1:length(event_dates_original)
+    if ~isfinite(event_dates_original(row_index))
         % пропускаем не-числа
         continue;
     end
-    fprintf('- событие [%d]: %s\n', raw{i,date_column_number}, raw{i,description_column_number});
+    fprintf('- событие [%d]: %s\n', raw{row_index,date_column_number}, raw{row_index,description_column_number});
     % проходим по всем факторам события и накладываем всплеск на временную шкалу
-    for factor_key = factors_by_row{i}
+    for factor_key = factors_by_row{row_index}
         % найдём порядковый номер фактора в списке всех факторов
         factor_index = find(strcmp(factors_map_keys, factor_key));
         fprintf('  - фактор [%d]: %s\n', factor_index, factor_key{1});
         % центр события на шкале (сдвинут на пол окна всплеска)
-        event_center_position = event_dates_scaled(i);
+        event_center_position = event_dates_scaled(row_index);
         % запомним его позицию для графика (добавляем в конец, незаполненные позиции - нулевые)
         event_dates_by_factor_scaled{factor_index}(find(event_dates_by_factor_scaled{factor_index}==0,1)) = event_center_position;
         % окно внутри временной шкалы с центром в событии
@@ -475,30 +496,64 @@ print_end_progress(title);
 
 % покажем графики событий по факторам
 figure('Name', 'вся шкала событий по факторам');
-% рисуем все факторы в первый подграфик
+% рисуем шкалу по всем факторам в первый подграфик
 subplot(length(factors_map_keys) + 1, 1, 1);
 plot(rot90(factor_time_line));
-for i = 1:length(factors_map_keys)
+for factor_index = 1:length(factors_map_keys)
     % рисуем фактор i в i+1 подграфик
-    subplot(length(factors_map_keys) + 1, 1, i+1);
-    plot(factor_time_line(i,:), '-o', 'MarkerIndices', event_dates_by_factor_scaled{i});
+    subplot(length(factors_map_keys) + 1, 1, factor_index+1);
+    plot(factor_time_line(factor_index,:), '-o', 'MarkerIndices', event_dates_by_factor_scaled{factor_index});
 end
 
-% функция fill_time_line_by_event_factors
-% - заполняем временные шкалы по факторам всплесками в центрах событий
-% todo... /а может и не надо её отдельно выносить/
+% просканируем всю шкалу событий скользящим окном на вход нейронной сети
 
-function [factor_time_line] = fill_time_line_by_event_factors(event_dates, event_factors, title)
+% шаг окна (1/20 от размера окна)
+% можно поставить в единицу, если время не критично
+nn_event_window_step = fix(nn_event_window_size / 20);
 
-% на входе:
-% - event_dates - исходные даты событий
-% - event_factors - факторы к каждой дате
-% - message - сообщение для консоли и графика
-% на выходе:
-% - factor_time_line - заполненная временная шкала по факторам
+% положения всех шагов
+nn_all_step_positions = 1:nn_event_window_step:time_line_size_scaled-nn_event_window_size;
 
+% количество шагов
+nn_event_window_step_count = length(nn_all_step_positions);
 
-end % function fill_time_line_by_event_factors
+% матрица результатов по всем шагам для графика
+nn_all_step_result = zeros(nn_event_window_step_count, length(classes_info_values));
+
+title = 'сканирую всю шкалу событий нейронной сетью';
+print_start_progress(title);
+
+fprintf('размер отмасштабированной шкалы: %d\n', time_line_size_scaled);
+fprintf('размер окна события: %d\n', nn_event_window_size);
+fprintf('шаг окна события: %d\n', nn_event_window_step);
+fprintf('количество шагов: %d\n', nn_event_window_step_count);
+
+% пройдём всю шкалу событий с заданным шагом
+for nn_event_window_step_counter = 1:nn_event_window_step_count
+    nn_event_window_position = nn_all_step_positions(nn_event_window_step_counter);
+    fprintf('- позиция %d\n', nn_event_window_position);
+    % двумерная матрица шкалы событий по факторам
+    % подвыборка из смещённого окна на основной шкале
+    step_event_matrix = factor_time_line(:, nn_event_window_position:nn_event_window_position+nn_event_window_size-1);
+    % делаем матрицу линейной
+    step_event_matrix_linear = rot90(step_event_matrix);
+    step_event_matrix_linear = step_event_matrix_linear(:);
+    nn_step_result = nn(step_event_matrix_linear);
+    nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
+end
+
+print_end_progress(title);
+
+% покажем результаты сканирования нейронной сетью
+figure('Name', 'результаты сканирования нейронной сетью');
+% рисуем шкалу по всем факторам в первый подграфик
+subplot(length(classes_info_values) + 1, 1, 1);
+plot(rot90(factor_time_line));
+for class_index = 1:length(classes_info_values)
+    % рисуем результаты i в i+1 подграфик
+    subplot(length(classes_info_values) + 1, 1, class_index+1);
+    plot(nn_all_step_positions, nn_all_step_result(:,class_index));
+end
 
 % функция parse_factors - парсим факторы/классы из excel-я
 
@@ -512,7 +567,6 @@ function [factors_by_row, factors_map] = parse_factors(raw, factor_column_number
 % - в factors_map будет весь список факторов по всем событиям
 %   в виде ассоциативного множества:
 %   factors_map(фактор) = сколько раз встретился этот фактор в событиях
-%   todo: наверно стоит сюда писать сразу список дат?
 
 % берём в factors только колонку с текстом/номерами факторов
 factors_by_row = raw(:,factor_column_number);
@@ -520,17 +574,17 @@ factors_by_row = raw(:,factor_column_number);
 factors_map = containers.Map;
 
 % проходим по всем строкам-событиям
-for i = 1:length(factors_by_row)
+for row_index = 1:length(factors_by_row)
     % парсим строку на фразы разделяя по запятым,
     % без пробелов в начале и конце
     
     % найденные факторы в текущей строке
     single_event_factors = {};
     
-    if ischar(factors_by_row{i}) % это текст?
-        single_event_factors = strsplit(lower(strtrim(factors_by_row{i})),'\s*,\s*','DelimiterType','RegularExpression');
-    elseif isfinite(factors_by_row{i}) % это число?
-        single_event_factors = {num2str(factors_by_row{i})};
+    if ischar(factors_by_row{row_index}) % это текст?
+        single_event_factors = strsplit(lower(strtrim(factors_by_row{row_index})),'\s*,\s*','DelimiterType','RegularExpression');
+    elseif isfinite(factors_by_row{row_index}) % это число?
+        single_event_factors = {num2str(factors_by_row{row_index})};
     end
     
     % добавляем все факторы текущего события к множеству всех факторов
@@ -544,7 +598,7 @@ for i = 1:length(factors_by_row)
     end
     
     % запоминаем распарсенный массив факторов для события
-    factors_by_row{i} = single_event_factors;
+    factors_by_row{row_index} = single_event_factors;
 end
 
 end % function parse_factors
