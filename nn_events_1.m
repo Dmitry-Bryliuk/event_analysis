@@ -280,7 +280,8 @@ for class_info = classes_info_values
     % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
     class_info.dates_scaled = calculate_event_dates_scaled(class_info.dates);
     % временная шкала для этого класса, по факторам, с наложенными всплесками событий
-    class_info.factor_time_line = zeros(length(factors_map), calculate_time_line_size_scaled(class_info.time_line_size_original));
+    class_info.time_line_size_scaled = calculate_time_line_size_scaled(class_info.time_line_size_original);
+    class_info.factor_time_line = zeros(length(factors_map), class_info.time_line_size_scaled);
     % списки отмасштабированных дат по факторам
     class_info.dates_by_factor_scaled = cell(length(factors_map_keys), 1);
     % проходим по всем событиям класса
@@ -314,12 +315,116 @@ figure('Name', 'события по классам');
 % берём обновлённый список классов
 classes_info_values = cell2mat(values(classes_info_map));
 
-class_events_index = 1;
+class_index = 1;
 for class_info = classes_info_values
-    subplot(length(classes_info_map), 1, class_events_index);
+    subplot(length(classes_info_map), 1, class_index);
     plot(rot90(class_info.factor_time_line));
-    class_events_index = class_events_index + 1;
+    class_index = class_index + 1;
 end
+
+% построим обучающие примеры для нейронной сети
+% вход на нс - матрица
+% [размер окна события * количество всех факторов]
+% затем эта матрица делается линейной (многомерные матрицы нс не понимает)
+% сдвиги при обучении делать не будем, т.к. при поиске событий будем
+% двигать сам вход нс относительно шкалы всех событий
+
+% берём обновлённый список классов
+classes_info_values = cell2mat(values(classes_info_map));
+
+% размер окна события это максимальный диапазон дат в классах
+nn_event_window_size = max([classes_info_values.time_line_size_scaled]);
+
+title = 'заполняю обучающие примеры по классам';
+print_start_progress(title);
+
+% проходим во всем классам
+for class_info = classes_info_values
+    fprintf('- класс %s\n', class_info.class_name);
+    % двумерная матрица шкалы событий по факторам
+    class_info.event_matrix = zeros(length(factors_map_keys), nn_event_window_size);
+    % проходим по всем событиям класса
+    for class_event_counter = 1:class_info.event_count
+        fprintf('  - событие #%d [%d]\n', class_event_counter, class_info.dates(class_event_counter));
+        % проходим по всем факторам события и накладываем всплеск на временную шкалу
+        for factor_key = class_info.factors{class_event_counter}
+            % найдём порядковый номер фактора в списке всех факторов
+            factor_index = find(strcmp(factors_map_keys, factor_key));
+            fprintf('    - фактор [%d]: %s\n', factor_index, factor_key{1});
+            % диапазон событий на оси
+            class_event_window_x = 1:class_info.time_line_size_scaled;
+            % добавим шкалу события по фактору на матрицу событий
+            class_info.event_matrix(factor_index, class_event_window_x) = class_info.factor_time_line(factor_index, class_event_window_x);
+        end
+    end
+    % делаем матрицу линейной
+    class_info.event_matrix_linear = rot90(class_info.event_matrix);
+    class_info.event_matrix_linear = class_info.event_matrix_linear(:);
+    % запомним данные по названию класса
+    classes_info_map(class_info.class_name) = class_info;
+end
+
+print_end_progress(title);
+
+% покажем матрицы событий по классам
+figure('Name', 'матрицы событий по классам');
+
+% берём обновлённый список классов
+classes_info_values = cell2mat(values(classes_info_map));
+
+class_index = 1;
+for class_info = classes_info_values
+    subplot(length(classes_info_map), 1, class_index);
+    plot(rot90(class_info.event_matrix));
+    class_index = class_index + 1;
+end
+
+% покажем линейные матрицы событий по классам
+figure('Name', 'линейные матрицы событий по классам');
+
+% берём обновлённый список классов
+classes_info_values = cell2mat(values(classes_info_map));
+
+class_index = 1;
+for class_info = classes_info_values
+    subplot(length(classes_info_map), 1, class_index);
+    plot(class_info.event_matrix_linear);
+    class_index = class_index + 1;
+end
+
+% выходная матрица для обучения нейронной сети
+% каждый столбец это один образ/пример
+nn_input = [classes_info_values.event_matrix_linear];
+
+% выходная матрица нейронной сети
+% количество столбцов такое же как во входной матрице
+% (это количество примеров, оно сейчас такое же как количество классов)
+% количество строк - это кличество классов
+% строка в столбце обозначает насколько принадлежит пример к классу
+% у нас один пример принадлежит одному классу, поэтому в столбце все нули,
+% за исключением строки с нужным классом
+nn_output = zeros(length(classes_info_values), size(nn_input, 2));
+
+for class_index = 1:length(classes_info_values)
+    % пока один пример на класс, но если будет больше, здесь будет цикл по sample_index
+    sample_index = class_index;
+    nn_output(class_index, sample_index) = 1;
+end
+
+title = 'обучаю нейронную сеть';
+print_start_progress(title);
+
+% нейронная сеть с двумя слоями, в списке количество нейронов в каждом слое
+% предположительно количество нейронов имеет смысл делать порядка
+% количества событий в классе
+% больше двух скрытых слоёв смысла делать наверно тоже не имеет
+nn = patternnet([10 10]);
+% не показывать окно с нс после обучения
+nn.trainParam.showWindow = 0;
+% обучаем нейронную сеть на примерах
+nn = train(nn, nn_input, nn_output);
+
+print_end_progress(title);
 
 % заполним временную шкалу всеми факторами
 
@@ -369,7 +474,7 @@ end
 print_end_progress(title);
 
 % покажем графики событий по факторам
-figure('Name', 'события по факторам');
+figure('Name', 'вся шкала событий по факторам');
 % рисуем все факторы в первый подграфик
 subplot(length(factors_map_keys) + 1, 1, 1);
 plot(rot90(factor_time_line));
