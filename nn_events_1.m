@@ -17,6 +17,7 @@
 %   проверить насколько всё чётко работает?
 %
 % всякие промежуточные технические todo-шки:
+% - [todo!!!] поправить rot90
 % - [todo] сохранение промежуточных результатов парсинга, чтобы
 %   быстрее перезапускалось с одинаковыми входными данными
 %
@@ -87,7 +88,7 @@ time_line_size_original = max_time_original - min_time_original + 1;
 % сдвинем даты в начало временной шкалы чтобы удобнее считать
 event_dates_original = event_dates_original - min_time_original + 1;
 
-fprintf('начало временной шкалы: %.2f, конец: %.2f, размер:  %.2f\n\n', min_time_original, max_time_original, time_line_size_original);
+fprintf('начало временной шкалы: %d, конец: %d, размер: %d\n\n', min_time_original, max_time_original, time_line_size_original);
 
 % масштабирование временной шкалы. мы делаем событие гладкой волной с пиком
 % в дате события, и чтобы дать пространство для этой волны делаем шкалу
@@ -498,13 +499,14 @@ print_end_progress(title);
 figure('Name', 'вся шкала событий по факторам');
 % рисуем шкалу по всем факторам в первый подграфик
 subplot(length(factors_map_keys) + 1, 1, 1);
-plot(rot90(factor_time_line));
+plot(factor_time_line');
 for factor_index = 1:length(factors_map_keys)
     % рисуем фактор i в i+1 подграфик
     subplot(length(factors_map_keys) + 1, 1, factor_index+1);
     plot(factor_time_line(factor_index,:), '-o', 'MarkerIndices', event_dates_by_factor_scaled{factor_index});
 end
 
+%{
 % просканируем всю шкалу событий скользящим окном на вход нейронной сети
 
 % шаг окна (1/20 от размера окна)
@@ -548,11 +550,59 @@ print_end_progress(title);
 figure('Name', 'результаты сканирования нейронной сетью');
 % рисуем шкалу по всем факторам в первый подграфик
 subplot(length(classes_info_values) + 1, 1, 1);
-plot(rot90(factor_time_line));
+plot(factor_time_line');
 for class_index = 1:length(classes_info_values)
     % рисуем результаты i в i+1 подграфик
     subplot(length(classes_info_values) + 1, 1, class_index+1);
     plot(nn_all_step_positions, nn_all_step_result(:,class_index));
+end
+
+%}
+
+% просканируем всю шкалу событий скользящим окном на вход нейронной сети
+% второй вариант, шаг по исходным годам
+
+% положения всех шагов в исходной датировке
+nn_all_step_positions_original = 1:time_line_size_original;
+% положения всех шагов в исходной отмасштабированные
+nn_all_step_positions_scaled = nn_all_step_positions_original * time_line_zoom;
+
+% матрица результатов по всем шагам для графика
+nn_all_step_result = zeros(time_line_size_original, length(classes_info_values));
+
+title = 'сканирую всю шкалу событий нейронной сетью';
+print_start_progress(title);
+
+% пройдём всю шкалу событий с шагом в исходный год
+for event_date_original = nn_all_step_positions_original
+    nn_event_window_position = event_date_original * time_line_zoom;
+    fprintf('- позиция %d/%d\n', event_date_original, time_line_size_original);
+    % двумерная матрица шкалы событий по факторам
+    % подвыборка из смещённого окна на основной шкале
+    nn_event_window_position_end = nn_event_window_position+nn_event_window_size-1;
+    if nn_event_window_position_end > time_line_size_scaled
+        fprintf('- достигнут предел сканирования\n');
+        break;
+    end
+    step_event_matrix = factor_time_line(:, nn_event_window_position:nn_event_window_position_end);
+    % делаем матрицу линейной
+    step_event_matrix_linear = rot90(step_event_matrix);
+    step_event_matrix_linear = step_event_matrix_linear(:);
+    nn_step_result = nn(step_event_matrix_linear);
+    nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
+end
+
+print_end_progress(title);
+
+% покажем результаты сканирования нейронной сетью
+figure('Name', 'результаты сканирования нейронной сетью');
+% рисуем шкалу по всем факторам в первый подграфик
+subplot(length(classes_info_values) + 1, 1, 1);
+plot(factor_time_line');
+for class_index = 1:length(classes_info_values)
+    % рисуем результаты i в i+1 подграфик
+    subplot(length(classes_info_values) + 1, 1, class_index+1);
+    plot(nn_all_step_positions_scaled, nn_all_step_result(:,class_index));
 end
 
 % функция parse_factors - парсим факторы/классы из excel-я
