@@ -128,7 +128,7 @@ plot(event_wave_x, event_wave_y);
 
 % функция пересчёта исходной даты в позицию на шкале
 % (масштабируем и сдвигаем на пол-окна)
-calculate_event_dates_time_line_scaled = @(event_dates_original) event_dates_original * time_line_zoom + event_wave_window_size_scaled_half + 1;
+calculate_event_dates_scaled = @(event_dates_original) event_dates_original * time_line_zoom + event_wave_window_size_scaled_half + 1;
 
 % функция вычисления диапазона окна события по центру события
 % (список значений оси X)
@@ -233,7 +233,7 @@ for generated_class_counter = 1:generated_negative_classes_count
     random_event_count = fix(class_events_refered.event_count/2) + randi(class_events_refered.event_count);
     % создадим пустой класс с нужным количеством событий
     % и сгенерированным именем
-    class_info = create_class_info(sprintf('random_class_%02d', generated_class_counter), random_event_count);
+    class_info = create_class_info(sprintf('generated_class_%02d', generated_class_counter), random_event_count);
     fprintf('- класс %s\n', class_info.class_name);
     % сгенерируем случайно диапазон дат для событий, +/- 50% от исходного
     random_date_range = fix(class_events_refered.time_line_size_original/2) + randi(class_events_refered.time_line_size_original);
@@ -278,9 +278,11 @@ print_start_progress(title);
 for class_info = classes_info_values
     fprintf('- класс %s\n', class_info.class_name);
     % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
-    class_info.dates_scaled = calculate_event_dates_time_line_scaled(class_info.dates);
+    class_info.dates_scaled = calculate_event_dates_scaled(class_info.dates);
     % временная шкала для этого класса, по факторам, с наложенными всплесками событий
     class_info.factor_time_line = zeros(length(factors_map), calculate_time_line_size_scaled(class_info.time_line_size_original));
+    % списки отмасштабированных дат по факторам
+    class_info.dates_by_factor_scaled = cell(length(factors_map_keys), 1);
     % проходим по всем событиям класса
     for class_event_counter = 1:class_info.event_count
         fprintf('  - событие #%d [%d]\n', class_event_counter, class_info.dates(class_event_counter));
@@ -292,7 +294,7 @@ for class_info = classes_info_values
             % центр события на шкале (сдвинут на пол окна всплеска)
             event_center_position = class_info.dates_scaled(class_event_counter);
             % запомним его позицию для графика
-            class_info.dates_time_line_by_factor{factor_index}(class_event_counter) = event_center_position;
+            class_info.dates_by_factor_scaled{factor_index}(length(class_info.dates_by_factor_scaled{factor_index}) + 1) = event_center_position;
             % окно внутри временной шкалы с центром в событии
             event_window = calculate_event_window(event_center_position);
             % добавим окно всплеска на временную шкалу
@@ -329,13 +331,13 @@ end
 factor_time_line = zeros(length(factors_map), time_line_size_scaled);
 
 % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
-event_dates_time_line = calculate_event_dates_time_line_scaled(event_dates_original);
+event_dates_scaled = calculate_event_dates_scaled(event_dates_original);
 
 % сюда складываем позиции событий на шкале по каждому фактору
 % (нужны чтобы отмечать позиции на графике)
-% event_dates_time_line_by_factor = cell(length(factors_map_keys), 1);
+% /старый вариант без предраспределения/ event_dates_time_line_by_factor = cell(length(factors_map_keys), 1);
 % выделим заранее место под список дат каждого фактора
-event_dates_time_line_by_factor = cellfun(@(fk) zeros(factors_map(fk), 1), factors_map_keys, 'UniformOutput', false);
+event_dates_by_factor_scaled = cellfun(@(fk) zeros(factors_map(fk), 1), factors_map_keys, 'UniformOutput', false);
 
 title = 'заполняю временные шкалы по факторам';
 print_start_progress(title);
@@ -354,9 +356,9 @@ for i = 1:length(event_dates_original)
         factor_index = find(strcmp(factors_map_keys, factor_key));
         fprintf('  - фактор [%d]: %s\n', factor_index, factor_key{1});
         % центр события на шкале (сдвинут на пол окна всплеска)
-        event_center_position = event_dates_time_line(i);
-        % запомним его позицию для графика (добавляем в конец)
-        event_dates_time_line_by_factor{factor_index}(find(event_dates_time_line_by_factor{factor_index}==0,1)) = event_center_position;
+        event_center_position = event_dates_scaled(i);
+        % запомним его позицию для графика (добавляем в конец, незаполненные позиции - нулевые)
+        event_dates_by_factor_scaled{factor_index}(find(event_dates_by_factor_scaled{factor_index}==0,1)) = event_center_position;
         % окно внутри временной шкалы с центром в событии
         event_window = calculate_event_window(event_center_position);
         % добавим окно всплеска на временную шкалу
@@ -374,7 +376,7 @@ plot(rot90(factor_time_line));
 for i = 1:length(factors_map_keys)
     % рисуем фактор i в i+1 подграфик
     subplot(length(factors_map_keys) + 1, 1, i+1);
-    plot(factor_time_line(i,:), '-o', 'MarkerIndices', event_dates_time_line_by_factor{i});
+    plot(factor_time_line(i,:), '-o', 'MarkerIndices', event_dates_by_factor_scaled{i});
 end
 
 % функция fill_time_line_by_event_factors
