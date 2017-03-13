@@ -508,12 +508,11 @@ for factor_index = 1:length(factors_map_keys)
     plot(factor_time_line(factor_index,:), '-o', 'MarkerIndices', event_dates_by_factor_scaled{factor_index});
 end
 
-%{
 % просканируем всю шкалу событий скользящим окном на вход нейронной сети
 
 % шаг окна (1/20 от размера окна)
 % можно поставить в единицу, если время не критично
-nn_event_window_step = fix(nn_event_window_size / 20);
+nn_event_window_step = time_line_zoom;%fix(nn_event_window_size / 20);
 
 % положения всех шагов
 nn_all_step_positions = 1:nn_event_window_step:time_line_size_scaled-nn_event_window_size;
@@ -549,7 +548,7 @@ end
 print_end_progress(title);
 
 % покажем результаты сканирования нейронной сетью
-figure('Name', 'результаты сканирования нейронной сетью');
+figure('Name', 'результаты сканирования нейронной сетью - 1');
 % рисуем шкалу по всем факторам в первый подграфик
 subplot(length(classes_info_values) + 1, 1, 1);
 plot(factor_time_line');
@@ -558,8 +557,6 @@ for class_index = 1:length(classes_info_values)
     subplot(length(classes_info_values) + 1, 1, class_index+1);
     plot(nn_all_step_positions, nn_all_step_result(:,class_index));
 end
-
-%}
 
 % просканируем всю шкалу событий скользящим окном на вход нейронной сети
 % второй вариант, шаг по исходным годам
@@ -576,6 +573,7 @@ title = 'сканирую всю шкалу событий нейронной сетью';
 print_start_progress(title);
 
 % пройдём всю шкалу событий с шагом в исходный год
+nn_event_window_step_counter = 1;
 for event_date_original = nn_all_step_positions_original
     nn_event_window_position = event_date_original * time_line_zoom;
     fprintf('- позиция %d/%d\n', event_date_original, time_line_size_original);
@@ -592,12 +590,13 @@ for event_date_original = nn_all_step_positions_original
     step_event_matrix_linear = step_event_matrix_linear(:);
     nn_step_result = nn(step_event_matrix_linear);
     nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
+    nn_event_window_step_counter = nn_event_window_step_counter + 1;
 end
 
 print_end_progress(title);
 
 % покажем результаты сканирования нейронной сетью
-figure('Name', 'результаты сканирования нейронной сетью');
+figure('Name', 'результаты сканирования нейронной сетью - 2');
 % рисуем шкалу по всем факторам в первый подграфик
 subplot(length(classes_info_values) + 1, 1, 1);
 plot(factor_time_line');
