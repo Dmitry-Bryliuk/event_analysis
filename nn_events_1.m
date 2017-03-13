@@ -508,7 +508,9 @@ for factor_index = 1:length(factors_map_keys)
     plot(factor_time_line(factor_index,:), '-o', 'MarkerIndices', event_dates_by_factor_scaled{factor_index});
 end
 
+%{
 % просканируем всю шкалу событий скользящим окном на вход нейронной сети
+% первый вариант
 
 % шаг окна (1/20 от размера окна)
 % можно поставить в единицу, если время не критично
@@ -557,6 +559,7 @@ for class_index = 1:length(classes_info_values)
     subplot(length(classes_info_values) + 1, 1, class_index+1);
     plot(nn_all_step_positions, nn_all_step_result(:,class_index));
 end
+%}
 
 % просканируем всю шкалу событий скользящим окном на вход нейронной сети
 % второй вариант, шаг по исходным годам
@@ -567,7 +570,7 @@ nn_all_step_positions_original = 1:time_line_size_original;
 nn_all_step_positions_scaled = nn_all_step_positions_original * time_line_zoom;
 
 % матрица результатов по всем шагам для графика
-nn_all_step_result = zeros(time_line_size_original, length(classes_info_values));
+nn_all_step_result = zeros(time_line_size_scaled, length(classes_info_values));
 
 title = 'сканирую всю шкалу событий нейронной сетью';
 print_start_progress(title);
@@ -589,7 +592,7 @@ for event_date_original = nn_all_step_positions_original
     step_event_matrix_linear = step_event_matrix';
     step_event_matrix_linear = step_event_matrix_linear(:);
     nn_step_result = nn(step_event_matrix_linear);
-    nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
+    nn_all_step_result(nn_event_window_position-time_line_zoom+1:nn_event_window_position, :) = repmat(nn_step_result, 1, time_line_zoom)';
     nn_event_window_step_counter = nn_event_window_step_counter + 1;
 end
 
@@ -600,10 +603,12 @@ figure('Name', 'результаты сканирования нейронной сетью - 2');
 % рисуем шкалу по всем факторам в первый подграфик
 subplot(length(classes_info_values) + 1, 1, 1);
 plot(factor_time_line');
+xlim([1 time_line_size_scaled]);
 for class_index = 1:length(classes_info_values)
     % рисуем результаты i в i+1 подграфик
     subplot(length(classes_info_values) + 1, 1, class_index+1);
-    plot(nn_all_step_positions_scaled, nn_all_step_result(:,class_index));
+    plot(1:time_line_size_scaled, nn_all_step_result(:,class_index));
+    xlim([1 time_line_size_scaled]);
 end
 
 % функция parse_factors - парсим факторы/классы из excel-я
