@@ -17,7 +17,6 @@
 %   проверить насколько всё чётко работает?
 %
 % всякие промежуточные технические todo-шки:
-% - [todo!!!] поправить rot90
 % - [todo] сохранение промежуточных результатов парсинга, чтобы
 %   быстрее перезапускалось с одинаковыми входными данными
 %
@@ -43,6 +42,7 @@
 % - полный бардак с областью видимости переменных, глобальная видимость
 %   кроме как внутри функций, отчего всякие промежуточные значения
 %   просачиваются в другие куски кода, поэтому будьте внимательны
+% - правильно повернуть матрицу чтобы строки стали столбцами: A = A'
 
 % очистим консоль от предыдущего запуска
 clc;
@@ -311,12 +311,13 @@ for class_info = classes_info_values
     end
     % запомним данные по названию класса
     classes_info_map(class_info.class_name) = class_info;
-    %figure; plot(rot90(class_events.factor_time_line));
 end
 
 print_end_progress(title);
 
+%{
 % покажем графики событий по классам
+% у каждого графика свой диапазон, поэтому графики не совпадают
 figure('Name', 'события по классам');
 
 % берём обновлённый список классов
@@ -325,9 +326,10 @@ classes_info_values = cell2mat(values(classes_info_map));
 class_index = 1;
 for class_info = classes_info_values
     subplot(length(classes_info_map), 1, class_index);
-    plot(rot90(class_info.factor_time_line));
+    plot(class_info.factor_time_line');
     class_index = class_index + 1;
 end
+%}
 
 % построим обучающие примеры для нейронной сети
 % вход на нс - матрица
@@ -365,7 +367,7 @@ for class_info = classes_info_values
         end
     end
     % делаем матрицу линейной
-    class_info.event_matrix_linear = rot90(class_info.event_matrix);
+    class_info.event_matrix_linear = class_info.event_matrix';
     class_info.event_matrix_linear = class_info.event_matrix_linear(:);
     % запомним данные по названию класса
     classes_info_map(class_info.class_name) = class_info;
@@ -382,7 +384,7 @@ classes_info_values = cell2mat(values(classes_info_map));
 class_index = 1;
 for class_info = classes_info_values
     subplot(length(classes_info_map), 1, class_index);
-    plot(rot90(class_info.event_matrix));
+    plot(class_info.event_matrix');
     class_index = class_index + 1;
 end
 
@@ -538,7 +540,7 @@ for nn_event_window_step_counter = 1:nn_event_window_step_count
     % подвыборка из смещённого окна на основной шкале
     step_event_matrix = factor_time_line(:, nn_event_window_position:nn_event_window_position+nn_event_window_size-1);
     % делаем матрицу линейной
-    step_event_matrix_linear = rot90(step_event_matrix);
+    step_event_matrix_linear = step_event_matrix';
     step_event_matrix_linear = step_event_matrix_linear(:);
     nn_step_result = nn(step_event_matrix_linear);
     nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
@@ -586,7 +588,7 @@ for event_date_original = nn_all_step_positions_original
     end
     step_event_matrix = factor_time_line(:, nn_event_window_position:nn_event_window_position_end);
     % делаем матрицу линейной
-    step_event_matrix_linear = rot90(step_event_matrix);
+    step_event_matrix_linear = step_event_matrix';
     step_event_matrix_linear = step_event_matrix_linear(:);
     nn_step_result = nn(step_event_matrix_linear);
     nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
