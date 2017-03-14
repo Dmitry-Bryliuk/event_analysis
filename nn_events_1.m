@@ -41,6 +41,7 @@
 %   методом тыка в консоли, отладке и окне переменных
 % - полный бардак с областью видимости переменных, глобальная видимость
 %   кроме как внутри функций, отчего всякие промежуточные значения
+%   и значения от предыдущих запусков
 %   просачиваются в другие куски кода, поэтому будьте внимательны
 % - правильно повернуть матрицу чтобы строки стали столбцами: A = A'
 
@@ -50,6 +51,13 @@ clc;
 % закроем видимые графики от предыдущего запуска
 % можно использовать close all hidden чтобы закрыть вообще все графики
 close all;
+
+% очистим все переменные, чтобы меньше ошибаться
+clearvars;
+
+% чтобы не переобучать сеть с каждым запуском при одинаковых данных
+% ставьте nn_trained = true
+nn_trained = false;
 
 % читаем excel-файл
 % ни Excel, ни офис чтобы читать excel-файлы матлабу не нужен
@@ -98,6 +106,7 @@ fprintf('начало временной шкалы: %d, конец: %d, размер: %d\n\n', min_time_origin
 % внутригодовые/внутримесячные шкалы событий, чем пересчитывать шкалу в дни
 
 % увеличиваем масштаб временной шкалы в 10 раз
+global time_line_zoom;
 time_line_zoom = 10;
 
 % ширина всплеска события в исходных единицах (годы)
@@ -146,6 +155,7 @@ calculate_event_window = @(event_center_position_scaled) event_center_position_s
 calculate_time_line_size_scaled = @(time_line_size_original) time_line_size_original * time_line_zoom + event_wave_window_size_scaled + 1;
 
 % размер отмасштабированной временной шкалы
+global time_line_size_scaled;
 time_line_size_scaled = calculate_time_line_size_scaled(time_line_size_original);
 % диапазон по оси X для рисования всяких графиков
 time_line_range_scaled = 1:time_line_size_scaled;
@@ -259,7 +269,7 @@ for generated_class_counter = 1:generated_negative_classes_count
         % генерируем через пермутации, чтобы факторы не дублировалось
         % (они могут продублироваться если другое событие с таким же фактором попадёт в то же место, это нормально)
         class_info.factors{class_event_counter} = factors_map_keys(randperm(length(factors_map_keys), random_factor_count));
-        fprintf('  - событие #%d/дата:%d/: %s, %s\n', class_event_counter, generated_event_date, generated_class_name, strjoin(class_info.factors{class_event_counter}));
+        fprintf('  - событие #%d/дата:%d/: %s\n', class_event_counter, generated_event_date, strjoin(class_info.factors{class_event_counter}));
     end
     % сдвинем даты в начало окна
     class_info.dates = class_info.dates - min(class_info.dates) + 1;
@@ -342,6 +352,7 @@ end
 classes_info_values = cell2mat(values(classes_info_map));
 
 % размер окна события это максимальный диапазон дат в классах
+global nn_event_window_size;
 nn_event_window_size = max([classes_info_values.time_line_size_scaled]);
 
 title = 'заполняю обучающие примеры по классам';
@@ -420,9 +431,7 @@ for class_index = 1:length(classes_info_values)
     nn_output(class_index, sample_index) = 1;
 end
 
-% чтобы не переобучать сеть с каждым запуском при одинаковых данных
-% ставьте nn_trained = true
-nn_trained = false;
+global nn;
 
 if nn_trained
     title = 'загружаю обученную нейронную сеть';
@@ -457,6 +466,7 @@ end
 % с максимумом в дате события
 % в начале и в конце к ней прицеплено по половине окна всплеска
 % чтобы крайние события не вылетали за пределы матрицы
+global factor_time_line;
 factor_time_line = zeros(length(factors_map), time_line_size_scaled);
 
 % даты, пересчитанные в позиции на временной шкале (сдвинуты на пол окна всплеска)
@@ -570,7 +580,7 @@ nn_all_step_positions_original = 1:time_line_size_original;
 nn_all_step_positions_scaled = nn_all_step_positions_original * time_line_zoom;
 
 % матрица результатов по всем шагам для графика
-nn_all_step_result = zeros(time_line_size_scaled, length(classes_info_values));
+nn_all_window_result = zeros(time_line_size_scaled, length(classes_info_values));
 
 title = 'сканирую всю шкалу событий нейронной сетью';
 print_start_progress(title);
@@ -578,21 +588,13 @@ print_start_progress(title);
 % пройдём всю шкалу событий с шагом в исходный год
 nn_event_window_step_counter = 1;
 for event_date_original = nn_all_step_positions_original
-    nn_event_window_position = event_date_original * time_line_zoom;
     fprintf('- позиция %d/%d\n', event_date_original, time_line_size_original);
-    % двумерная матрица шкалы событий по факторам
-    % подвыборка из смещённого окна на основной шкале
-    nn_event_window_position_end = nn_event_window_position+nn_event_window_size-1;
-    if nn_event_window_position_end > time_line_size_scaled
+    [nn_window_result, nn_event_window_position, window_event_matrix, out_of_range] = calc_nn_window(event_date_original);
+    if out_of_range
         fprintf('- достигнут предел сканирования\n');
         break;
     end
-    step_event_matrix = factor_time_line(:, nn_event_window_position:nn_event_window_position_end);
-    % делаем матрицу линейной
-    step_event_matrix_linear = step_event_matrix';
-    step_event_matrix_linear = step_event_matrix_linear(:);
-    nn_step_result = nn(step_event_matrix_linear);
-    nn_all_step_result(nn_event_window_position-time_line_zoom+1:nn_event_window_position, :) = repmat(nn_step_result, 1, time_line_zoom)';
+    nn_all_window_result(nn_event_window_position-time_line_zoom+1:nn_event_window_position, :) = repmat(nn_window_result, 1, time_line_zoom)';
     nn_event_window_step_counter = nn_event_window_step_counter + 1;
 end
 
@@ -607,7 +609,7 @@ xlim([1 time_line_size_scaled]);
 for class_index = 1:length(classes_info_values)
     % рисуем результаты i в i+1 подграфик
     subplot(length(classes_info_values) + 1, 1, class_index+1);
-    plot(1:time_line_size_scaled, nn_all_step_result(:,class_index));
+    plot(1:time_line_size_scaled, nn_all_window_result(:,class_index));
     xlim([1 time_line_size_scaled]);
 end
 
