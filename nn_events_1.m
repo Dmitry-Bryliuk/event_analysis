@@ -13,6 +13,8 @@
 %   похожих событий
 % - [todo] вн€тные подписи и позиционирование графиков, пока что не пон€ть
 %   что оно показывает
+% - [todo] разобратьс€ с правильным обучением нс, пока недообучаетс€, это
+%   главный глюк
 % - [todo] искажение/зашумление всей шкалы и отдельных примеров, чтобы
 %   проверить насколько всЄ чЄтко работает?
 %
@@ -451,21 +453,32 @@ else
     nn = patternnet([10 10]);
     % не показывать окно с нс после обучени€
     nn.trainParam.showWindow = 0;
+    % показывать ли прогресс в консоль
+    nn.trainParam.showCommandLine = 1;
+    
+    % параметры обучени€ нс
+    % ошибка
+    nn.trainParam.goal = 1e-6;
+    % максимальное количество итераций
+    nn.trainParam.epochs = 2000;
+    
     % обучаем нейронную сеть на примерах
     nn = train(nn, nn_input, nn_output);
     
     save nn;
     
-    nn_performance = nn(nn_input);
-    nn_classify = vec2ind(nn_performance);
+    nn_result = nn(nn_input);
+    nn_classify = vec2ind(nn_result);
     nn_classify_error = nn_classify - (1:length(nn_classify));
     nn_classify_error_total = sum(nn_classify_error ~= 0);
     
-    fprintf('ошибка обученной нейронной сети: %.6f, неправильно классифицировано %d/%d\n', perform(nn, nn_output, nn_performance), nn_classify_error_total, length(nn_classify));
-    disp('результат классификации обучающих примеров:');
-    disp(nn_classify);
+    fprintf('ошибка обученной нейронной сети: %.6f, неправильно классифицировано %d/%d\n', perform(nn, nn_output, nn_result), nn_classify_error_total, length(nn_classify));
+    disp('ошибка классификации обучающих примеров:');
+    disp(nn_classify_error);
 
+    nn_error_message = '';
     if nn_classify_error_total > 0
+        nn_error_message = ' (больша€ погрешность, помен€йте параметры!)';
         disp('   !!!   больша€ погрешность нейронной сети, помен€йте параметры обучени€   !!!');
     end
 
@@ -490,6 +503,8 @@ else
     
     print_end_progress(progress_message);
 end
+
+return;
 
 % заполним временную шкалу всеми факторами
 
