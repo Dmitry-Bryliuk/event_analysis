@@ -13,10 +13,14 @@
 %   похожих событий
 % - [todo] внятные подписи и позиционирование графиков, пока что не понять
 %   что оно показывает
+% - [todo] сканирование в конце шкалы с заполнением пустых мест нулями
+% - [todo] нулевые и единичные отрицательные примеры
+% - [todo] проверить детектирование на неискажённых дубликатах
 % - [todo] разобраться с правильным обучением нс, пока недообучается, это
 %   главный глюк
 % - [todo] искажение/зашумление всей шкалы и отдельных примеров, чтобы
 %   проверить насколько всё чётко работает?
+% - [todo] отдельные сети на каждый класс, чтобы не цепляло события вне диапазона?
 %
 % всякие промежуточные технические todo-шки:
 % - [todo] сохранение промежуточных результатов парсинга, чтобы
@@ -235,7 +239,7 @@ print_end_progress(progress_message);
 % (отрицательные примеры)
 
 % количество отрицательных примеров
-generated_negative_classes_count = 10;
+generated_classes_count = 3;
 
 % список исходных классов
 % из них будем брать некоторые параметры для генерации выборки
@@ -245,7 +249,7 @@ progress_message = 'генерирую случайные классы';
 print_start_progress(progress_message);
 
 % сгенерируем случайные классы в заданном количестве
-for generated_class_counter = 1:generated_negative_classes_count
+for generated_class_counter = 1:generated_classes_count
     % выберем случайно исходный класс
     class_events_refered = classes_info_values(randi(length(classes_info_values)));
     % сгенерируем случайно количество событий, +/- 50% от исходного
@@ -504,7 +508,7 @@ else
     print_end_progress(progress_message);
 end
 
-return;
+%return;
 
 % заполним временную шкалу всеми факторами
 
@@ -641,6 +645,7 @@ for event_date_original = nn_all_step_positions_original
         fprintf('- достигнут предел сканирования\n');
         break;
     end
+    nn_event_window_position = nn_event_window_position + event_wave_window_size_scaled_half;
     nn_all_window_result(nn_event_window_position:nn_event_window_position+time_line_zoom-1, :) = repmat(nn_window_result, 1, time_line_zoom)';
     nn_event_window_step_counter = nn_event_window_step_counter + 1;
 end
@@ -656,7 +661,8 @@ xlim([1 time_line_size_scaled]);
 for class_index = 1:length(classes_info_values)
     % рисуем результаты i в i+1 подграфик
     subplot(length(classes_info_values) + 1, 1, class_index+1);
-    plot(1:time_line_size_scaled, nn_all_window_result(:,class_index));
+    area(1:time_line_size_scaled, nn_all_window_result(:,class_index));
+    ylim([0 1.1]);
     xlim([1 time_line_size_scaled]);
 end
 
