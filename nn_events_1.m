@@ -161,8 +161,8 @@ time_line_size_scaled = calculate_time_line_size_scaled(time_line_size_original)
 time_line_range_scaled = 1:time_line_size_scaled;
 
 % функция для упрощения вывода сообщений о прогрессе
-print_start_progress = @(title) fprintf('%s...\n', title);
-print_end_progress = @(title) fprintf('%s - сделано\n\n', title);
+print_start_progress = @(progress_message) fprintf('%s...\n', progress_message);
+print_end_progress = @(progress_message) fprintf('%s - сделано\n\n', progress_message);
 
 % парсим excel-файл
 
@@ -195,8 +195,8 @@ classes_info_map = containers.Map('KeyType','char','ValueType','any');
 % функция для создания пустой структуры класса
 create_class_info = @(class_name, class_event_count) struct('class_name', class_name, 'event_count', class_event_count, 'rows', zeros(class_event_count, 1), 'dates', zeros(class_event_count, 1), 'factors', {{}});
 
-title = 'заполняю исходные классы';
-print_start_progress(title);
+progress_message = 'заполняю исходные классы';
+print_start_progress(progress_message);
 
 % пройдём по всем классам
 for class_key = classes_map_keys
@@ -227,7 +227,7 @@ for class_key = classes_map_keys
     classes_info_map(class_key) = class_info;
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 % сгенерируем случайно несколько групп событий других классов
 % (отрицательные примеры)
@@ -239,8 +239,8 @@ generated_negative_classes_count = 10;
 % из них будем брать некоторые параметры для генерации выборки
 classes_info_values = cell2mat(values(classes_info_map));
 
-title = 'генерирую случайные классы';
-print_start_progress(title);
+progress_message = 'генерирую случайные классы';
+print_start_progress(progress_message);
 
 % сгенерируем случайные классы в заданном количестве
 for generated_class_counter = 1:generated_negative_classes_count
@@ -279,7 +279,7 @@ for generated_class_counter = 1:generated_negative_classes_count
     classes_info_map(class_info.class_name) = class_info;
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 % заполним временные шкалы по факторам для классов
 % сейчас один класс - один пример
@@ -288,8 +288,8 @@ print_end_progress(title);
 % берём обновлённый список классов
 classes_info_values = cell2mat(values(classes_info_map));
 
-title = 'заполняю временные шкалы по всем классам';
-print_start_progress(title);
+progress_message = 'заполняю временные шкалы по всем классам';
+print_start_progress(progress_message);
 
 % проходим во всем классам
 for class_info = classes_info_values
@@ -323,7 +323,7 @@ for class_info = classes_info_values
     classes_info_map(class_info.class_name) = class_info;
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 %{
 % покажем графики событий по классам
@@ -355,8 +355,8 @@ classes_info_values = cell2mat(values(classes_info_map));
 global nn_event_window_size;
 nn_event_window_size = max([classes_info_values.time_line_size_scaled]);
 
-title = 'заполняю обучающие примеры по классам';
-print_start_progress(title);
+progress_message = 'заполняю обучающие примеры по классам';
+print_start_progress(progress_message);
 
 % проходим во всем классам
 for class_info = classes_info_values
@@ -384,7 +384,7 @@ for class_info = classes_info_values
     classes_info_map(class_info.class_name) = class_info;
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 % покажем матрицы событий по классам
 figure('Name', 'матрицы событий по классам');
@@ -434,15 +434,15 @@ end
 global nn;
 
 if nn_trained
-    title = 'загружаю обученную нейронную сеть';
-    print_start_progress(title);
+    progress_message = 'загружаю обученную нейронную сеть';
+    print_start_progress(progress_message);
     
     load nn;
     
-    print_end_progress(title);
+    print_end_progress(progress_message);
 else
-    title = 'обучаю нейронную сеть';
-    print_start_progress(title);
+    progress_message = 'обучаю нейронную сеть';
+    print_start_progress(progress_message);
     
     % нейронная сеть с двумя слоями, в списке количество нейронов в каждом слое
     % предположительно количество нейронов имеет смысл делать порядка
@@ -456,7 +456,39 @@ else
     
     save nn;
     
-    print_end_progress(title);
+    nn_performance = nn(nn_input);
+    nn_classify = vec2ind(nn_performance);
+    nn_classify_error = nn_classify - (1:length(nn_classify));
+    nn_classify_error_total = sum(nn_classify_error ~= 0);
+    
+    fprintf('ошибка обученной нейронной сети: %.6f, неправильно классифицировано %d/%d\n', perform(nn, nn_output, nn_performance), nn_classify_error_total, length(nn_classify));
+    disp('результат классификации обучающих примеров:');
+    disp(nn_classify);
+
+    if nn_classify_error_total > 0
+        disp('   !!!   большая погрешность нейронной сети, поменяйте параметры обучения   !!!');
+    end
+
+    figure('Name', 'классификация и ошибки нейронной сети на обучающих примерах');
+    subplot(3, 1, 1);
+    bar(1:length(nn_classify));
+    title('правильные отклики нс');
+    subplot(3, 1, 2);
+    bar(nn_classify);
+    title('фактические отклики нс');
+    subplot(3, 1, 3);
+    bar(nn_classify_error);
+    title('ошибка классификации');
+
+    % покажем отклики нейронной сети на обученных примерах
+    % (посмотрим качество обучения)
+    figure('Name', 'отклики нейронной сети по обучающим примерам');
+    for class_index = 1:length(classes_info_values)
+        subplot(length(classes_info_values), 1, class_index);
+        bar(nn(classes_info_values(class_index).event_matrix_linear));
+    end
+    
+    print_end_progress(progress_message);
 end
 
 % заполним временную шкалу всеми факторами
@@ -478,8 +510,8 @@ event_dates_scaled = calculate_event_dates_scaled(event_dates_original);
 % выделим заранее место под список дат каждого фактора
 event_dates_by_factor_scaled = cellfun(@(fk) zeros(factors_map(fk), 1), factors_map_keys, 'UniformOutput', false);
 
-title = 'заполняю временные шкалы по факторам';
-print_start_progress(title);
+progress_message = 'заполняю временные шкалы по факторам';
+print_start_progress(progress_message);
 
 % проходим по всем событиям, по всем его факторам
 % и добавляем каждый фактор на соответствующую временную шкалу
@@ -505,7 +537,7 @@ for row_index = 1:length(event_dates_original)
     end
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 % покажем графики событий по факторам
 figure('Name', 'вся шкала событий по факторам');
@@ -535,8 +567,8 @@ nn_event_window_step_count = length(nn_all_step_positions);
 % матрица результатов по всем шагам для графика
 nn_all_step_result = zeros(nn_event_window_step_count, length(classes_info_values));
 
-title = 'сканирую всю шкалу событий нейронной сетью';
-print_start_progress(title);
+progress_message = 'сканирую всю шкалу событий нейронной сетью';
+print_start_progress(progress_message);
 
 fprintf('размер отмасштабированной шкалы: %d\n', time_line_size_scaled);
 fprintf('размер окна события: %d\n', nn_event_window_size);
@@ -557,7 +589,7 @@ for nn_event_window_step_counter = 1:nn_event_window_step_count
     nn_all_step_result(nn_event_window_step_counter, :) = nn_step_result;
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 % покажем результаты сканирования нейронной сетью
 figure('Name', 'результаты сканирования нейронной сетью - 1');
@@ -582,8 +614,8 @@ nn_all_step_positions_scaled = nn_all_step_positions_original * time_line_zoom;
 % матрица результатов по всем шагам для графика
 nn_all_window_result = zeros(time_line_size_scaled, length(classes_info_values));
 
-title = 'сканирую всю шкалу событий нейронной сетью';
-print_start_progress(title);
+progress_message = 'сканирую всю шкалу событий нейронной сетью';
+print_start_progress(progress_message);
 
 % пройдём всю шкалу событий с шагом в исходный год
 nn_event_window_step_counter = 1;
@@ -594,11 +626,11 @@ for event_date_original = nn_all_step_positions_original
         fprintf('- достигнут предел сканирования\n');
         break;
     end
-    nn_all_window_result(nn_event_window_position-time_line_zoom+1:nn_event_window_position, :) = repmat(nn_window_result, 1, time_line_zoom)';
+    nn_all_window_result(nn_event_window_position:nn_event_window_position+time_line_zoom-1, :) = repmat(nn_window_result, 1, time_line_zoom)';
     nn_event_window_step_counter = nn_event_window_step_counter + 1;
 end
 
-print_end_progress(title);
+print_end_progress(progress_message);
 
 % покажем результаты сканирования нейронной сетью
 figure('Name', 'результаты сканирования нейронной сетью - 2');

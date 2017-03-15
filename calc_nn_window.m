@@ -19,7 +19,7 @@ function [nn_window_result, nn_event_window_position, window_event_matrix, out_o
 global factor_time_line time_line_zoom time_line_size_scaled nn_event_window_size nn;
 
 % начальная позиция окна на отмасштабированной шкале
-nn_event_window_position = event_date_original * time_line_zoom;
+nn_event_window_position = 1 + (event_date_original - 1) * time_line_zoom;
 % конечная позиция окна
 nn_event_window_position_end = nn_event_window_position + nn_event_window_size - 1;
 % умещается ли окно до конца шкалы
